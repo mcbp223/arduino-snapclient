@@ -222,7 +222,8 @@ protected:
     if (p_client->connected()) return true;
     p_client->setTimeout(CONFIG_CLIENT_TIMEOUT_SEC);
     if (!p_client->connect(server_ip, server_port)) {
-      ESP_LOGE(TAG, "... socket connect failed errno=%d", errno);
+      ESP_LOGE(TAG, "... socket connect %d.%d.%d.%d:%d failed errno=%d"
+        , server_ip[0], server_ip[1], server_ip[2], server_ip[3], server_port, errno);
       delay(4000);
       return false;
     }
@@ -465,23 +466,8 @@ protected:
       return false;
     }
 
-    // // Calculate TClienctx.tdif : Trx-Tsend-Tnetdelay/2
-    struct timeval ttx, trx;
-    ttx.tv_sec = base_message.sent.sec;
-    ttx.tv_usec = base_message.sent.usec;
-    trx.tv_sec = base_message.received.sec;
-    trx.tv_usec = base_message.received.usec;
-
-    // for time management
-    snap_time.updateServerTime(trx);
-    // for synchronization
-    p_snap_output->snapTimeSync().updateServerTime(snap_time.toMillis(trx));
-
-    int64_t time_diff = snap_time.timeDifferenceMs(trx, ttx);
-    uint32_t time_diff_int = time_diff;
-    assert(time_diff_int == time_diff);
-    ESP_LOGD(TAG, "Time Difference to Server: %ld ms", time_diff);
-    snap_time.setTimeDifferenceClientServerMs(time_diff);
+    // https://github.com/badaix/snapcast/blob/86cd4b2b63e750a72e0dfe6a46d47caf01426c8d/client/controller.cpp#L285
+    snap_time.setDiff(time_message.latency.toMicros(), base_message.received.toMicros() - base_message.sent.toMicros());
 
     return true;
   }

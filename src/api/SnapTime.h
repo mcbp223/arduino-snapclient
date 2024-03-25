@@ -23,7 +23,7 @@ public:
   }
 
   /// Provides the actual time as timeval
-  timeval time() {
+  timeval time() const {
     timeval result;
     int rc = gettimeofday(&result, NULL);
     if (rc) {
@@ -32,6 +32,22 @@ public:
       result.tv_usec = (ms - (result.tv_sec * 1000)) * 1000;
     }
     return result;
+  }
+
+  static int64_t toMicros(timeval tv) {
+    return int64_t(tv.tv_sec) * 1000 * 1000 + tv.tv_usec;
+  }
+
+  int64_t serverMicros() const {
+    return toMicros(time()) - micros_diff_s2c;
+  }
+
+  void setDiff(int64_t microsLatencyC2S, int64_t microsDiffS2C) {
+    // https://github.com/badaix/snapcast/blob/develop/doc/binary_protocol.md
+    // https://github.com/badaix/snapcast/blob/86cd4b2b63e750a72e0dfe6a46d47caf01426c8d/client/time_provider.cpp#L32
+    //micros_diff_s2c = microsDiffS2C;
+    micros_diff_s2c = (microsDiffS2C - microsLatencyC2S) / 2;
+    ESP_LOGD(TAG, "%lld, %lld -> %lld", microsLatencyC2S, microsDiffS2C, micros_diff_s2c);
   }
 
   /// Provides the current server time in ms
@@ -118,7 +134,7 @@ protected:
   uint32_t time_update_count = 0;
   timeval server_time;
   bool has_sntp_time = false;
-  
+  int64_t micros_diff_s2c = 0; // client time minus server time
 };
 
 }

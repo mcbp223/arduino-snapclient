@@ -212,6 +212,9 @@ enum MessageType {
 struct tv_t {
   int32_t sec;
   int32_t usec;
+
+  int64_t toMillis() const { return int64_t(sec) * 1000 + usec / 1000; }
+  int64_t toMicros() const { return int64_t(sec) * 1000 * 1000 + usec; }
 };
 
 /// @brief Snapcast Base Message

@@ -136,6 +136,7 @@ class SnapOutput : public AudioInfoSupport {
 
     SnapTimeSync &ts = *p_snap_time_sync;
 
+  #if 0
     // calculate how long we need to wait to playback the audio
     auto delay_ms = getDelayMs();
 
@@ -157,6 +158,15 @@ class SnapOutput : public AudioInfoSupport {
         }
       }
     }
+  #else
+    int64_t delayMicros = 1000LL * ts.getStartDelay();
+    int64_t diff = snap_time.serverMicros() - (header.toMicros() + delayMicros);
+    float factor = 1.0f + float(diff) / 5e6f; // linear function, when diff=0 factor=1
+    factor = constrain(factor, 0.1f, 2.0f);
+    if(factor != playbackFactor()) {
+      setPlaybackFactor(factor);
+    }
+  #endif
     return result;
   }
 

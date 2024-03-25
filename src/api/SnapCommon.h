@@ -24,8 +24,12 @@ struct SnapAudioHeader {
   size_t size = 0;
   codec_type codec = NO_CODEC;
 
-  uint64_t operator-(SnapAudioHeader &h1) {
-    return (sec - h1.sec) * 1000000 + usec - h1.usec;
+  int64_t toMicros() {
+    return int64_t(sec) * 1000 * 1000 + usec;
+  }
+
+  int64_t operator-(SnapAudioHeader &h1) {
+    return toMicros() - h1.toMicros();
   }
 };
 
