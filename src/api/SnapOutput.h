@@ -159,11 +159,19 @@ class SnapOutput : public AudioInfoSupport {
       }
     }
   #else
-    int64_t delayMicros = 1000LL * ts.getStartDelay();
-    int64_t diff = snap_time.serverMicros() - (header.toMicros() + delayMicros);
-    float factor = 1.0f + float(diff) / 5e6f; // linear function, when diff=0 factor=1
-    factor = constrain(factor, 0.1f, 2.0f);
-    if(factor != playbackFactor()) {
+    constexpr int ignoredMicrosNear = 5000;
+    constexpr int ignoredMicrosFar =  5000;
+    constexpr float invslope = 5e6f;
+
+    int64_t diff = snap_time.serverMicros() - header.toMicros();
+
+    if(abs(diff) < ignoredMicrosNear) { // favor no correction when over the target
+      if(playbackFactor() != 1.0f)
+        setPlaybackFactor(1.0f);
+    } else if(abs(diff - last_diff_corrected) > ignoredMicrosFar) { // don't correct too often
+      last_diff_corrected = diff;
+      float factor = 1.0f + float(diff) / invslope; // linear function, when diff=0 factor=1
+      factor = constrain(factor, 0.1f, 2.0f);
       setPlaybackFactor(factor);
     }
   #endif
@@ -177,6 +185,7 @@ class SnapOutput : public AudioInfoSupport {
   EncodedAudioStream decoder_stream;
   VolumeStream vol_stream;
   ResampleStream resample;
+  int64_t last_diff_corrected = 0;
   float vol = 1.0;         // volume in the range 0.0 - 1.0
   float vol_factor = 1.0;  //
   bool is_mute = false;

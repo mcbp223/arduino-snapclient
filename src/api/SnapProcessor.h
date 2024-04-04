@@ -467,7 +467,8 @@ protected:
     }
 
     // https://github.com/badaix/snapcast/blob/86cd4b2b63e750a72e0dfe6a46d47caf01426c8d/client/controller.cpp#L285
-    snap_time.setDiff(time_message.latency.toMicros(), base_message.received.toMicros() - base_message.sent.toMicros());
+    snap_time.setDiff(time_message.latency.toMicros() - 1000LL * p_snap_output->snapTimeSync().getStartDelay()
+                    , base_message.received.toMicros() - base_message.sent.toMicros());
 
     return true;
   }
