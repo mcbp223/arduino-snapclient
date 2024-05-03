@@ -25,12 +25,18 @@ public:
   /// Provides the actual time as timeval
   timeval time() const {
     timeval result;
+  #if ESP32
+    int64_t micros = esp_timer_get_time();
+    result.tv_sec = micros/1000000;
+    result.tv_usec = micros - (result.tv_sec * 1000000);
+  #else
     int rc = gettimeofday(&result, NULL);
     if (rc) {
       uint32_t ms = millis();
       result.tv_sec = ms / 1000;
       result.tv_usec = (ms - (result.tv_sec * 1000)) * 1000;
     }
+  #endif
     return result;
   }
 
@@ -38,8 +44,22 @@ public:
     return int64_t(tv.tv_sec) * 1000 * 1000 + tv.tv_usec;
   }
 
-  int64_t serverMicros() const {
-    return toMicros(time()) - micros_diff_s2c;
+  int64_t clientMicros() {
+  #if ESP32
+    int64_t client_micros = esp_timer_get_time();
+  #else
+    int64_t client_micros = toMicros(time());
+  #endif
+    last_alive_micros = client_micros; // save it for watchdog
+    return client_micros;
+  }
+
+  int64_t serverMicros() {
+    return clientMicros() - micros_diff_s2c;
+  }
+
+  int64_t lastAliveMicros() const {
+    return last_alive_micros;
   }
 
   void setDiff(int64_t microsLatencyC2S, int64_t microsDiffS2C) {
@@ -135,6 +155,7 @@ protected:
   timeval server_time;
   bool has_sntp_time = false;
   int64_t micros_diff_s2c = 0; // client time minus server time
+  int64_t last_alive_micros = 0;
 };
 
 }

@@ -163,6 +163,18 @@ protected:
     delay(5);
   }
 
+  /// can return true if buffers are full or chunk too in the future
+  virtual bool needsDelay() {
+    return false;
+  }
+
+  uint16_t peekMessageType() {
+    int i = p_client->peek();
+    SnapMessageBase msg;
+    msg.deserialize(reinterpret_cast<const char*>(&i), sizeof(i));
+    return msg.type;
+  }
+
   bool resizeData() {
     audio.resize(frame_size);
     send_receive_buffer.resize(CONFIG_SNAPCAST_BUFF_LEN);
@@ -172,13 +184,26 @@ protected:
 
   bool processMessageLoop() {
     ESP_LOGD(TAG, "processMessageLoop");
+
+    if(!p_client->connected()) {
+      ESP_LOGE(TAG, "client not connected");
+      return false;
+    }
+    
     // Wait for data
     if (p_client->available() < BASE_MESSAGE_SIZE) {
       return true;
     }
 
+    // test whether incoming data can be buffered
+    const uint16_t peek_type = peekMessageType();
+    if (peek_type == SNAPCAST_MESSAGE_WIRE_CHUNK && needsDelay())
+      return true;
+
     if (!readBaseMessage())
       return false;
+    
+    assert(peek_type == base_message.type);
 
     if (!readData())
       return false;
@@ -204,6 +229,10 @@ protected:
     case SNAPCAST_MESSAGE_TIME:
       processMessageTime();
       break;
+    
+    case SNAPCAST_MESSAGE_STREAM_TAGS:
+      log_buf_i((uint8_t*)(&send_receive_buffer[0]), base_message.size);
+      break;
 
     default:
       ESP_LOGD(TAG, "Invalid Message: %u", base_message.type);
@@ -221,13 +250,26 @@ protected:
     ESP_LOGD(TAG, "start");
     if (p_client->connected()) return true;
     p_client->setTimeout(CONFIG_CLIENT_TIMEOUT_SEC);
-    if (!p_client->connect(server_ip, server_port)) {
-      ESP_LOGE(TAG, "... socket connect %d.%d.%d.%d:%d failed errno=%d"
-        , server_ip[0], server_ip[1], server_ip[2], server_ip[3], server_port, errno);
-      delay(4000);
-      return false;
-    }
-    return true;
+
+    if(p_client->connect(server_ip, server_port))
+      return true;
+    
+    ESP_LOGE(TAG, "... socket connect %d.%d.%d.%d:%d failed errno=%d"
+      , server_ip[0], server_ip[1], server_ip[2], server_ip[3], server_port, errno);
+    delay(4000);
+
+  #if ESP32
+    IPAddress alt = WiFi.gatewayIP();
+    alt[3] = 100; // TODO: config alternate server address in subnet
+    if(p_client->connect(alt, server_port))
+      return true;
+    
+    ESP_LOGE(TAG, "... socket connect %d.%d.%d.%d:%d failed errno=%d"
+      , alt[0], alt[1], alt[2], alt[3], server_port, errno);
+    delay(4000);
+  #endif
+
+    return false;
   }
 
   bool writeHallo() {
@@ -404,7 +446,7 @@ protected:
     return true;
   }
 
-  bool wireChunk(SnapMessageWireChunk &wire_chunk_message) {
+  virtual bool wireChunk(SnapMessageWireChunk &wire_chunk_message) {
     ESP_LOGD(TAG, "start");
     SnapAudioHeader header;
     header.size = wire_chunk_message.size;
@@ -467,7 +509,7 @@ protected:
     }
 
     // https://github.com/badaix/snapcast/blob/86cd4b2b63e750a72e0dfe6a46d47caf01426c8d/client/controller.cpp#L285
-    snap_time.setDiff(time_message.latency.toMicros() - 1000LL * p_snap_output->snapTimeSync().getStartDelay()
+    snap_time.setDiff(time_message.latency.toMicros()
                     , base_message.received.toMicros() - base_message.sent.toMicros());
 
     return true;

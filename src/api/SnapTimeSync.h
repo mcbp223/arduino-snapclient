@@ -53,6 +53,8 @@ public:
   /// conists of the delay added by the decoder and your selected output device
   void setProcessingLag(int lag) { this->processing_lag = lag; }
 
+  int  getProcessingLag() const { return processing_lag; }
+
   /// Defines the interval that is used to adjust the sample rate: 10 means
   /// every 10 updates.
   void setInterval(int interval) { this->interval = interval; }

@@ -88,17 +88,17 @@ class SnapOutput : public AudioInfoSupport {
   /// Defines the audio output chain to the final output
   void setOutput(AudioOutput &output) {
     this->out = &output;  // final output
-    resample.setStream(output);
-    vol_stream.setStream(resample);  // adjust volume
-    decoder_stream.setStream(&vol_stream);  // decode to pcm
+    resample.setOutput(output);
+    vol_stream.setOutput(resample);  // adjust volume
+    decoder_output.setOutput(&vol_stream);  // decode to pcm
   }
 
   AudioOutput &getOutput() { return *out; }
 
   /// Defines the decoder class
-  void setDecoder(AudioDecoder &dec) { decoder_stream.setDecoder(&dec); }
+  void setDecoder(AudioDecoder &dec) { decoder_output.setDecoder(&dec); }
 
-  AudioDecoder &getDecoder() { return decoder_stream.decoder(); }
+  AudioDecoder &getDecoder() { return decoder_output.decoder(); }
 
   /// setup of all audio objects
   void setAudioInfo(AudioInfo info) {
@@ -123,7 +123,7 @@ class SnapOutput : public AudioInfoSupport {
   // writes the audio data to the decoder
   size_t audioWrite(const void *src, size_t size) {
     ESP_LOGD(TAG, "%zu", size);
-    size_t result = decoder_stream.write((const uint8_t *)src, size);
+    size_t result = decoder_output.write((const uint8_t *)src, size);
 
     return result;
   }
@@ -163,7 +163,8 @@ class SnapOutput : public AudioInfoSupport {
     constexpr int ignoredMicrosFar =  5000;
     constexpr float invslope = 5e6f;
 
-    int64_t diff = snap_time.serverMicros() - header.toMicros();
+  //int64_t diff = snap_time.serverMicros() - header.toMicros();
+    int64_t diff = snap_time.serverMicros() - header.toMicros() - 1000LL * p_snap_time_sync->getStartDelay();
 
     if(abs(diff) < ignoredMicrosNear) { // favor no correction when over the target
       if(playbackFactor() != 1.0f)
@@ -182,7 +183,7 @@ class SnapOutput : public AudioInfoSupport {
   const char *TAG = "SnapOutput";
   AudioOutput *out = nullptr;
   AudioInfo audio_info;
-  EncodedAudioStream decoder_stream;
+  EncodedAudioOutput decoder_output;
   VolumeStream vol_stream;
   ResampleStream resample;
   int64_t last_diff_corrected = 0;
@@ -218,10 +219,10 @@ class SnapOutput : public AudioInfoSupport {
     out->begin();
 
     // open decoder
-    auto dec_cfg = decoder_stream.defaultConfig();
+    auto dec_cfg = decoder_output.defaultConfig();
     dec_cfg.copyFrom(audio_info);
-    decoder_stream.begin(dec_cfg);
-    decoder_stream.setNotifyAudioChange(*this);
+    decoder_output.begin(dec_cfg);
+    decoder_output.addNotifyAudioChange(*this);
 
     // open resampler
     auto res_cfg = resample.defaultConfig();
